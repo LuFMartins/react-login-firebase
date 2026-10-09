@@ -1,7 +1,23 @@
-import React, { useState } from "react";
-import { db } from "./firebaseConnection";
-import { addDoc, collection, doc, getDoc, getDocs, setDoc } from "firebase/firestore";
+import React, { useEffect, useState } from "react";
+import { auth, db } from "./firebaseConnection";
+import {
+  addDoc,
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  onSnapshot,
+  deleteDoc
+} from "firebase/firestore";
 import "./App.css"
+
+import {
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut
+} from "firebase/auth";
 
 import type { LivroProps } from "./tyoes";
 
@@ -9,8 +25,36 @@ function App() {
 
   const [titulo, setTitulo] = useState('')
   const [autor, setAutor] = useState('')
+  const [idLivro, setIdLivro] = useState('')
+  const [user, setUser] = useState(false)
+  const [userDetail, setUserDetail] = useState<any>({})
+  const [email, setEmail] = useState('')
+  const [senha, setSenha] = useState('')
+
 
   const [livros, setLivros] = useState<LivroProps[]>([])
+
+  useEffect(() => {
+    async function loadBooks() {
+      const unsub = onSnapshot(collection(db, 'livros'), (snapshot) => {
+        let listaBooks: any = []
+
+        snapshot.forEach((doc) => {
+          listaBooks.push({
+            id: doc.id,
+            titulo: doc.data().titulo,
+            autor: doc.data().autor,
+
+          })
+        })
+
+        setLivros(listaBooks)
+      })
+    }
+
+    loadBooks();
+  }, [])
+
 
   async function handleAdd() {
 
@@ -95,11 +139,111 @@ function App() {
       })
   }
 
+  async function editarLivro() {
+    const docRef = doc(db, 'livros', idLivro)
+    await updateDoc(docRef, {
+      titulo: titulo,
+      autor: autor
+    })
+      .then(() => {
+        console.log("LIVRO ATUALIZADO")
+        setIdLivro('')
+        setTitulo('')
+        setAutor('')
+      })
+      .catch(() => {
+        console.log("ERRO AO ATUALIZAR O LIVRO")
+      })
+  }
+
+  async function deletarLivro(id: string) {
+    const docRef = doc(db, 'livros', id)
+    await deleteDoc(docRef)
+  }
+
+  async function cadastrarUsuario() {
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email, senha)
+      alert('Usuario Cadastrado')
+      console.log(userCredential)
+      setEmail('')
+      setSenha('')
+    } catch (error: any) {
+      setEmail('')
+      setSenha('')
+      alert(error)
+
+      if (error.code === 'auth/weak-password') {
+        alert('SENHA FRACA!')
+      } else if (error.code === 'auth/invalid-email') {
+        alert('EMAIL INVÁLIDO')
+      }
+    }
+
+
+  }
+
+  async function logarUsuario() {
+    try {
+      const userAuth = await signInWithEmailAndPassword(auth, email, senha)
+
+      console.log(userAuth)
+      
+      setUserDetail({
+        uid: userAuth.user.uid,
+        email: userAuth.user.email,
+      })
+
+      setUser(true)
+      setEmail('')
+      setSenha('')
+    } catch (error) {
+      alert('impossivel realizar o login')
+    }  
+  }
+
+  async function logOut(){
+    const response = await signOut(auth)
+    setUser(false)
+    setUserDetail({})
+    console.log(response)
+  }
+
+
+  async function checkUser() {
+    // ADICIONAR A FUNÇÃO DE PERMANENCIA DE LOGIN
+  }
+
   return (
     <>
       <h1>TESTANDO</h1>
 
+      {user && <h2>Olá, {userDetail.email}</h2>}
+
       <div className="container">
+        <label>E-mail:</label>
+        <input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
+          placeholder="E-mail"
+        />
+        <label>Senha:</label>
+        <input type="password" value={senha} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSenha(e.target.value)}
+          placeholder="Senha"
+        />
+
+        <button onClick={logarUsuario}>Login</button>
+        <button onClick={cadastrarUsuario}>Cadastrar</button>
+        <button onClick={logOut}>logout</button>
+
+      </div>
+
+      <hr />
+
+      <div className="container">
+        <label>ID do Livro:</label>
+        <input type="text" placeholder="Digite o ID o Livro"
+          value={idLivro} onChange={(e) => setIdLivro(e.target.value)} />
+
         <label>Titulo:</label>
         <textarea
           placeholder="Digite o titulo"
@@ -112,13 +256,19 @@ function App() {
 
         <button onClick={handleAdd}>Cadastrar</button>
         <button onClick={buscarPost}>Buscar Itens</button>
+        <br />
+        <button onClick={editarLivro}>Atualizar post</button>
 
-        {livros.map(item => (
-          <div key={item.id}>
-            <h1>{item.titulo}</h1>
-            <p>{item.autor}</p>
-          </div>
-        ))}
+        <ul>
+          {livros.map(item => (
+            <li key={item.id}>
+              <p>{item.id}</p>
+              <p>{item.titulo}</p>
+              <p>{item.autor}</p>
+              <button onClick={() => deletarLivro(item.id)}>EXCLUIR</button>
+            </li>
+          ))}
+        </ul>
 
       </div>
     </>
